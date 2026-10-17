@@ -1,0 +1,1265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ginrin Sanctuary — Realistic Koi Breeding & Slatted Hatchery</title>
+<style>
+  :root {
+    --bg-dark: #0b1316;
+    --panel-bg: rgba(14, 25, 30, 0.92);
+    --border-gold: rgba(212, 175, 55, 0.45);
+    --accent-cyan: #4dd0e1;
+    --accent-gold: #ffd54f;
+    --text-main: #e0f2f1;
+    --text-muted: #80cbc4;
+  }
+  * { box-sizing: border-box; user-select: none; margin: 0; padding: 0; }
+  body {
+    background: var(--bg-dark);
+    color: var(--text-main);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    display: flex;
+  }
+  #canvas-container {
+    position: relative;
+    flex: 1;
+    height: 100vh;
+    overflow: hidden;
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: grab;
+  }
+  canvas:active { cursor: grabbing; }
+
+  /* HUD Top Bar */
+  #hud-top {
+    position: absolute;
+    top: 12px;
+    left: 16px;
+    right: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    pointer-events: none;
+    z-index: 10;
+  }
+  .hud-pill {
+    pointer-events: auto;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-gold);
+    border-radius: 8px;
+    padding: 8px 14px;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+    font-size: 13px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .hud-title {
+    font-weight: 700;
+    color: var(--accent-gold);
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .btn {
+    background: rgba(77, 208, 225, 0.15);
+    border: 1px solid var(--accent-cyan);
+    color: var(--text-main);
+    padding: 5px 11px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.15s ease;
+  }
+  .btn:hover {
+    background: rgba(77, 208, 225, 0.35);
+    transform: translateY(-1px);
+  }
+  .btn-gold {
+    background: rgba(255, 213, 79, 0.15);
+    border-color: var(--accent-gold);
+    color: var(--accent-gold);
+  }
+  .btn-gold:hover { background: rgba(255, 213, 79, 0.3); }
+
+  /* Inspector Card */
+  #inspector {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    width: 310px;
+    background: var(--panel-bg);
+    border: 1px solid var(--border-gold);
+    border-radius: 10px;
+    padding: 12px 15px;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 8px 28px rgba(0,0,0,0.65);
+    pointer-events: auto;
+    z-index: 10;
+    font-size: 12.5px;
+  }
+  #inspector h3 {
+    color: var(--accent-gold);
+    font-size: 14px;
+    margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+  }
+  .gene-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .gene-label { color: var(--text-muted); }
+  .swatch-group { display: flex; gap: 5px; align-items: center; }
+  .swatch {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.5);
+  }
+
+  /* Off-Screen Holding Bay Drawer */
+  #holding-drawer {
+    width: 340px;
+    height: 100vh;
+    background: #091114;
+    border-left: 2px solid var(--border-gold);
+    display: flex;
+    flex-direction: column;
+    z-index: 15;
+    transition: margin-right 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  #holding-drawer.collapsed {
+    margin-right: -340px;
+  }
+  .drawer-header {
+    padding: 12px 14px;
+    background: rgba(255, 213, 79, 0.08);
+    border-bottom: 1px solid var(--border-gold);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .drawer-header h2 {
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    color: var(--accent-gold);
+  }
+  .chute-selector {
+    padding: 8px 14px;
+    background: rgba(77, 208, 225, 0.08);
+    border-bottom: 1px solid rgba(77, 208, 225, 0.25);
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .chute-selector select {
+    background: #0d1b20;
+    color: var(--accent-cyan);
+    border: 1px solid var(--accent-cyan);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+  }
+  .hint-banner {
+    padding: 6px 14px;
+    font-size: 11.5px;
+    color: #b2dfdb;
+    background: rgba(0,0,0,0.35);
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+</style>
+</head>
+<body>
+
+<div id="canvas-container">
+  <div id="hud-top">
+    <div class="hud-pill">
+      <span class="hud-title">Ginrin Sanctuary</span>
+      <span>Lift fish to inspect iridescent scales &bull; Drag between Pond, Breeder &amp; 5 Holding Tanks</span>
+    </div>
+    <div class="hud-pill">
+      <button class="btn btn-gold" id="btn-spawn-wild">+ Introduce Rare Wild Koi</button>
+      <button class="btn" id="btn-force-breed">Trigger Spawning</button>
+      <button class="btn" id="btn-toggle-drawer">Toggle Holding Bay (5 Tanks)</button>
+    </div>
+  </div>
+
+  <div id="inspector">
+    <h3 id="insp-name">Hover or Lift a Koi</h3>
+    <div class="gene-row"><span class="gene-label">Pattern Morph:</span><span id="insp-pattern">—</span></div>
+    <div class="gene-row"><span class="gene-label">Scale Finish:</span><span id="insp-shimmer">—</span></div>
+    <div class="gene-row"><span class="gene-label">Pigment Palette:</span><span class="swatch-group" id="insp-colors">—</span></div>
+    <div class="gene-row"><span class="gene-label">Stage / Size:</span><span id="insp-stage">—</span></div>
+    <div class="gene-row"><span class="gene-label">Location:</span><span id="insp-zone">—</span></div>
+  </div>
+
+  <canvas id="pondCanvas"></canvas>
+</div>
+
+<div id="holding-drawer">
+  <div class="drawer-header">
+    <h2>Off-Screen Holding Bay</h2>
+    <span style="font-size:11px;color:var(--text-muted)">5 Classification Tanks</span>
+  </div>
+  <div class="chute-selector">
+    <span>One-Way Fry Slats Route To:</span>
+    <select id="slat-target-select">
+      <option value="tank0">Tank 1: Fry Nursery</option>
+      <option value="tank1">Tank 2: Metallic / Ginrin</option>
+      <option value="tank2">Tank 3: Championship Line</option>
+      <option value="tank3">Tank 4: Mutants &amp; Opals</option>
+      <option value="tank4">Tank 5: Cull / Trade Hold</option>
+    </select>
+  </div>
+  <div class="hint-banner">
+    Slatted weir between Breeder Tank &amp; Holding Tank 1 blocks adults (&gt;18px) and auto-passes newborn fry one-way.
+  </div>
+  <canvas id="drawerCanvas" style="flex:1; width:100%;"></canvas>
+</div>
+
+<script>
+(() => {
+  const pondCanvas = document.getElementById('pondCanvas');
+  const pCtx = pondCanvas.getContext('2d');
+  const drawerCanvas = document.getElementById('drawerCanvas');
+  const dCtx = drawerCanvas.getContext('2d');
+
+  let width = 0, height = 0, dWidth = 0, dHeight = 0;
+  let time = 0;
+
+  // Zones definition (populated on resize)
+  const zones = {
+    mainPond: { id: 'mainPond', name: 'Main Sanctuary Pond', type: 'circle', x: 0, y: 0, r: 0 },
+    river:    { id: 'river', name: 'Spring Channel', type: 'rect', x: 0, y: 0, w: 0, h: 0 },
+    breeder:  { id: 'breeder', name: 'Breeder Spawning Tank', type: 'rect', x: 0, y: 0, w: 0, h: 0 },
+    slatChute:{ id: 'slatChute', name: 'One-Way Fry Slats', type: 'rect', x: 0, y: 0, w: 0, h: 0 },
+    tanks: [
+      { id: 'tank0', name: 'Tank 1: Fry Nursery (Slatted Inflow)', x: 0, y: 0, w: 0, h: 0 },
+      { id: 'tank1', name: 'Tank 2: Metallic / Ginrin Line', x: 0, y: 0, w: 0, h: 0 },
+      { id: 'tank2', name: 'Tank 3: Championship Breeders', x: 0, y: 0, w: 0, h: 0 },
+      { id: 'tank3', name: 'Tank 4: Cosmic & Opal Morphs', x: 0, y: 0, w: 0, h: 0 },
+      { id: 'tank4', name: 'Tank 5: Surplus / Release Hold', x: 0, y: 0, w: 0, h: 0 }
+    ]
+  };
+
+  let slatTargetId = 'tank0';
+  document.getElementById('slat-target-select').addEventListener('change', (e) => {
+    slatTargetId = e.target.value;
+  });
+
+  // Decorative stones, lilypads, ripples, droplets, hearts/eggs
+  let pondStones = [];
+  let lilyPads = [];
+  let ripples = [];
+  let droplets = [];
+  let spawnParticles = [];
+
+  function resize() {
+    width = pondCanvas.parentElement.clientWidth;
+    height = pondCanvas.parentElement.clientHeight;
+    pondCanvas.width = width * window.devicePixelRatio;
+    pondCanvas.height = height * window.devicePixelRatio;
+    pCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+
+    dWidth = drawerCanvas.clientWidth;
+    dHeight = drawerCanvas.clientHeight;
+    drawerCanvas.width = Math.max(1, dWidth * window.devicePixelRatio);
+    drawerCanvas.height = Math.max(1, dHeight * window.devicePixelRatio);
+    dCtx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0);
+
+    // Layout Main Pond (Left/Center)
+    const pondR = Math.min(width * 0.31, height * 0.38);
+    zones.mainPond.x = width * 0.35;
+    zones.mainPond.y = height * 0.50;
+    zones.mainPond.r = pondR;
+
+    // Layout Breeder Tank & One-Way Slatted Chute on Right side of Main Canvas
+    const brW = Math.min(250, width * 0.25);
+    const brH = Math.min(240, height * 0.36);
+    zones.breeder.x = width - brW - 28;
+    zones.breeder.y = height * 0.16;
+    zones.breeder.w = brW;
+    zones.breeder.h = brH;
+
+    // One-Way Slatted Weir Reception Chute directly below/attached to Breeder Tank
+    zones.slatChute.x = zones.breeder.x;
+    zones.slatChute.y = zones.breeder.y + zones.breeder.h;
+    zones.slatChute.w = brW;
+    zones.slatChute.h = 95;
+
+    // Layout 5 Off-Screen Holding Tanks in the Drawer
+    const pad = 12;
+    const tH = (dHeight - pad * 6) / 5;
+    zones.tanks.forEach((t, i) => {
+      t.x = pad;
+      t.y = pad + i * (tH + pad);
+      t.w = dWidth - pad * 2;
+      t.h = Math.max(60, tH);
+    });
+
+    buildPondScenery();
+  }
+
+  function buildPondScenery() {
+    pondStones = [];
+    const r = zones.mainPond.r;
+    const count = 48;
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2;
+      const radVar = r + 6 + Math.sin(i * 4.3) * 5;
+      pondStones.push({
+        x: zones.mainPond.x + Math.cos(ang) * radVar,
+        y: zones.mainPond.y + Math.sin(ang) * radVar,
+        rx: 14 + (i % 5) * 3,
+        ry: 10 + ((i * 3) % 4) * 2.5,
+        rot: ang + Math.PI / 2 + ((i % 3) - 1) * 0.2,
+        shade: 34 + (i * 7) % 24,
+        moss: (i % 4 === 0)
+      });
+    }
+
+    lilyPads = [];
+    const padAngles = [0.4, 0.55, 2.3, 2.5, 4.7, 5.0];
+    padAngles.forEach((ang, idx) => {
+      const dist = r * (0.68 + (idx % 2) * 0.14);
+      lilyPads.push({
+        x: zones.mainPond.x + Math.cos(ang) * dist,
+        y: zones.mainPond.y + Math.sin(ang) * dist,
+        size: 18 + (idx % 3) * 6,
+        notch: ang + 1.2,
+        hasFlower: idx % 2 === 0,
+        flowerHue: idx === 0 ? '#f8bbd0' : '#fff9c4'
+      });
+    });
+  }
+
+  // Color & Pattern Palettes (Realistic + Vibrant Shimmering Morphs)
+  const PALETTES = [
+    { name: 'Imperial Kohaku', base: '#f7f9f9', sec: '#e53935', tert: '#ff8a65', pattern: 'Kohaku', shimmer: 0.75, finish: 'Ginrin Diamond' },
+    { name: 'Taisho Sanke', base: '#f5f5f5', sec: '#d81b60', tert: '#1c2833', pattern: 'Sanke', shimmer: 0.80, finish: 'Pearl Scale' },
+    { name: 'Yamabuki Ogon', base: '#ffd54f', sec: '#ff8f00', tert: '#ffffff', pattern: 'Ogon Metallic', shimmer: 0.96, finish: '24K Metallic Ginrin' },
+    { name: 'Sapphire Showa', base: '#1a2530', sec: '#00e5ff', tert: '#ff3d00', pattern: 'Showa', shimmer: 0.92, finish: 'Prismatic Opal' },
+    { name: 'Emerald Doitsu', base: '#004d40', sec: '#1de9b6', tert: '#ffd740', pattern: 'Doitsu', shimmer: 0.90, finish: 'Emerald Mirror' },
+    { name: 'Solar Tancho', base: '#fafafa', sec: '#ff1744', tert: '#ffd600', pattern: 'Tancho', shimmer: 0.85, finish: 'Silky Ginrin' },
+    { name: 'Amethyst Nebula', base: '#311b92', sec: '#ea80fc', tert: '#00e5ff', pattern: 'Nebula', shimmer: 1.0, finish: 'Starlight Iridescent' }
+  ];
+
+  let fishList = [];
+  let nextFishId = 1;
+
+  class Koi {
+    constructor(opts = {}) {
+      this.id = nextFishId++;
+      const preset = opts.preset || PALETTES[Math.floor(Math.random() * PALETTES.length)];
+      this.name = opts.name || `${preset.name} #${this.id}`;
+      this.baseColor = opts.baseColor || preset.base;
+      this.secColor = opts.secColor || preset.sec;
+      this.tertColor = opts.tertColor || preset.tert;
+      this.pattern = opts.pattern || preset.pattern;
+      this.shimmer = opts.shimmer !== undefined ? opts.shimmer : preset.shimmer;
+      this.finish = opts.finish || preset.finish;
+
+      this.zone = opts.zone || 'mainPond';
+      this.isFry = opts.isFry || false;
+      this.length = this.isFry ? 19 : (opts.length || 52 + Math.random() * 16);
+      this.maxLength = opts.maxLength || (56 + Math.random() * 14);
+      this.age = this.isFry ? 0 : 100;
+
+      // Position & Kinematics
+      const zPos = getRandomPointInZone(this.zone);
+      this.x = opts.x !== undefined ? opts.x : zPos.x;
+      this.y = opts.y !== undefined ? opts.y : zPos.y;
+      this.angle = Math.random() * Math.PI * 2;
+      this.speed = 0.7 + Math.random() * 0.5;
+      this.targetAngle = this.angle;
+      this.turnTimer = 0;
+      this.breedCooldown = 180;
+
+      // Spine nodes for realistic swimming articulation
+      this.numNodes = 10;
+      this.spine = [];
+      for (let i = 0; i < this.numNodes; i++) {
+        this.spine.push({ x: this.x - Math.cos(this.angle) * i * 5, y: this.y - Math.sin(this.angle) * i * 5 });
+      }
+
+      // Unique blotch seeds along the spine
+      this.patches = [];
+      for (let i = 1; i < 8; i++) {
+        this.patches.push({
+          node: i,
+          offset: (Math.random() - 0.5) * 0.6,
+          size: 0.45 + Math.random() * 0.55,
+          colorType: Math.random() < 0.68 ? 'sec' : 'tert'
+        });
+      }
+
+      // Sparkle facets (scales)
+      this.scales = [];
+      for (let i = 0; i < 28; i++) {
+        this.scales.push({
+          nodeIdx: 1 + Math.floor(Math.random() * 7),
+          lat: (Math.random() - 0.5) * 1.4,
+          phase: Math.random() * Math.PI * 2,
+          hueShift: Math.floor(Math.random() * 50) - 25
+        });
+      }
+    }
+
+    update() {
+      if (draggedFish === this) {
+        // Wriggle smoothly in air while held
+        const wriggle = Math.sin(time * 0.28) * 0.35;
+        this.angle += (wriggle - Math.sin((time - 1) * 0.28) * 0.35);
+        this.updateSpine(true);
+        if (Math.random() < 0.35) {
+          droplets.push({
+            x: this.x + (Math.random() - 0.5) * 24,
+            y: this.y + (Math.random() - 0.5) * 24,
+            vx: (Math.random() - 0.5) * 1.5,
+            vy: 1.5 + Math.random() * 2,
+            life: 24,
+            inDrawer: isCursorInDrawer
+          });
+        }
+        return;
+      }
+
+      // Gradual fry growth when inside holding tanks or main pond
+      if (this.isFry) {
+        this.age++;
+        if (this.zone !== 'breeder' && this.zone !== 'slatChute') {
+          this.length = Math.min(this.maxLength, this.length + 0.022);
+          if (this.length > 36) this.isFry = false;
+        }
+      }
+
+      if (this.breedCooldown > 0) this.breedCooldown--;
+
+      // Wandering & Zone confinement
+      this.turnTimer--;
+      if (this.turnTimer <= 0) {
+        this.targetAngle = this.angle + (Math.random() - 0.5) * 1.8;
+        this.turnTimer = 40 + Math.floor(Math.random() * 70);
+      }
+
+      // If fry in Breeder Tank: gentle water current pulls it south through the One-Way Slatted Weir!
+      if (this.zone === 'breeder' && this.isFry) {
+        const gateX = zones.breeder.x + zones.breeder.w * 0.5;
+        const gateY = zones.breeder.y + zones.breeder.h + 35;
+        this.targetAngle = Math.atan2(gateY - this.y, gateX - this.x);
+        this.speed = 1.15;
+        if (this.y > zones.breeder.y + zones.breeder.h + 12) {
+          // Passed through the one-way slats! Transfer to selected Holding Tank
+          this.zone = slatTargetId;
+          const dest = getRandomPointInZone(this.zone);
+          this.x = dest.x;
+          this.y = dest.y;
+          for (let i = 0; i < this.numNodes; i++) {
+            this.spine[i].x = this.x;
+            this.spine[i].y = this.y;
+          }
+          spawnParticles.push({
+            x: gateX, y: zones.breeder.y + zones.breeder.h,
+            text: `Fry slipped through slats → ${getZoneLabel(slatTargetId)}`,
+            life: 95
+          });
+          return;
+        }
+      } else {
+        this.speed = this.isFry ? 0.95 : 0.75;
+      }
+
+      // Boundary steering
+      SteerInsideZone(this);
+
+      // Smooth angular turn
+      let diff = ((this.targetAngle - this.angle + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+      this.angle += diff * 0.065;
+
+      const swimCycle = Math.sin(time * (this.isFry ? 0.26 : 0.14) + this.id) * 0.09;
+      const moveAngle = this.angle + swimCycle;
+
+      this.x += Math.cos(moveAngle) * this.speed;
+      this.y += Math.sin(moveAngle) * this.speed;
+
+      this.updateSpine(false);
+      // Ambient water surface ripple occasionally
+      if (Math.random() < 0.008 && this.zone === 'mainPond') {
+        ripples.push({ x: this.x, y: this.y, r: 2, maxR: 28, alpha: 0.35 });
+      }
+    }
+
+    updateSpine(isHeld) {
+      const segLen = this.length / this.numNodes;
+      this.spine[0].x = this.x;
+      this.spine[0].y = this.y;
+      const wagFreq = isHeld ? 0.32 : (this.isFry ? 0.25 : 0.14);
+      const wagAmp = isHeld ? 0.18 : 0.08;
+
+      for (let i = 1; i < this.numNodes; i++) {
+        const prev = this.spine[i - 1];
+        const curr = this.spine[i];
+        let dx = curr.x - prev.x;
+        let dy = curr.y - prev.y;
+        let ang = Math.atan2(dy, dx);
+        const tailSway = Math.sin(time * wagFreq - i * 0.55 + this.id) * wagAmp * (i / this.numNodes);
+        ang += tailSway;
+        curr.x = prev.x + Math.cos(ang) * segLen;
+        curr.y = prev.y + Math.sin(ang) * segLen;
+      }
+    }
+
+    draw(ctx, isLifted = false) {
+      ctx.save();
+
+      // Thickness profile along 10 spine nodes
+      const radii = [0.16, 0.24, 0.26, 0.23, 0.19, 0.15, 0.11, 0.08, 0.05, 0.02].map(
+        f => f * this.length * (isLifted ? 1.32 : 1.0)
+      );
+
+      // 1. Render Realistic Depth Shadow on Pond Floor
+      const shadowOffset = isLifted ? 26 : 7;
+      ctx.save();
+      ctx.translate(shadowOffset * 0.6, shadowOffset);
+      ctx.beginPath();
+      this.traceBodyPath(ctx, radii);
+      ctx.fillStyle = isLifted ? 'rgba(0, 8, 12, 0.45)' : 'rgba(0, 10, 14, 0.28)';
+      ctx.fill();
+      ctx.restore();
+
+      // If lifted, scale slightly around head
+      if (isLifted) {
+        ctx.shadowColor = 'rgba(77, 208, 225, 0.45)';
+        ctx.shadowBlur = 18;
+      }
+
+      // 2. Pectoral & Ventral Fins (translucent rayed fans)
+      this.drawPairedFins(ctx, 2, radii[2] * 1.9, 0.65, isLifted);
+      this.drawPairedFins(ctx, 5, radii[5] * 1.4, 0.85, isLifted);
+
+      // 3. Flowing Translucent Caudal (Tail) Fin
+      const n8 = this.spine[8], n9 = this.spine[9];
+      const tailAng = Math.atan2(n9.y - n8.y, n9.x - n8.x);
+      const tailLen = this.length * (isLifted ? 0.34 : 0.26);
+      const spread = 0.48 + Math.sin(time * 0.18 + this.id) * 0.08;
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(n8.x, n8.y);
+      ctx.quadraticCurveTo(
+        n9.x + Math.cos(tailAng + spread) * tailLen * 0.7,
+        n9.y + Math.sin(tailAng + spread) * tailLen * 0.7,
+        n9.x + Math.cos(tailAng + spread * 0.6) * tailLen,
+        n9.y + Math.sin(tailAng + spread * 0.6) * tailLen
+      );
+      ctx.quadraticCurveTo(
+        n9.x + Math.cos(tailAng) * tailLen * 0.55,
+        n9.y + Math.sin(tailAng) * tailLen * 0.55,
+        n9.x + Math.cos(tailAng - spread * 0.6) * tailLen,
+        n9.y + Math.sin(tailAng - spread * 0.6) * tailLen
+      );
+      ctx.quadraticCurveTo(
+        n9.x + Math.cos(tailAng - spread) * tailLen * 0.7,
+        n9.y + Math.sin(tailAng - spread) * tailLen * 0.7,
+        n8.x, n8.y
+      );
+      ctx.fillStyle = this.baseColor + '99';
+      ctx.fill();
+      ctx.restore();
+
+      // 4. Main Body Contour + Clipped Genetic Pigments & 3D Cylindrical Shading
+      ctx.save();
+      ctx.beginPath();
+      this.traceBodyPath(ctx, radii);
+      ctx.clip();
+
+      // Base body fill
+      ctx.fillStyle = this.baseColor;
+      ctx.fill();
+
+      // Genetic Pattern Blotches
+      if (this.pattern === 'Tancho') {
+        const hNode = this.spine[1];
+        ctx.fillStyle = this.secColor;
+        ctx.beginPath();
+        ctx.arc(hNode.x, hNode.y, radii[1] * 0.72, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (this.pattern !== 'Ogon Metallic') {
+        this.patches.forEach(p => {
+          const node = this.spine[p.node];
+          const prev = this.spine[p.node - 1];
+          const ang = Math.atan2(node.y - prev.y, node.x - prev.x) + Math.PI / 2;
+          const px = node.x + Math.cos(ang) * radii[p.node] * p.offset;
+          const py = node.y + Math.sin(ang) * radii[p.node] * p.offset;
+          ctx.fillStyle = p.colorType === 'sec' ? this.secColor : this.tertColor;
+          ctx.beginPath();
+          ctx.arc(px, py, radii[p.node] * p.size * 1.35, 0, Math.PI * 2);
+          ctx.fill();
+        });
+      }
+
+      // 3D Cylindrical Lateral Shading & Specular Spine Highlight
+      const head = this.spine[0], mid = this.spine[4];
+      const grad = ctx.createRadialGradient(
+        (head.x + mid.x) * 0.5 - 4, (head.y + mid.y) * 0.5 - 4, 2,
+        (head.x + mid.x) * 0.5, (head.y + mid.y) * 0.5, this.length * 0.65
+      );
+      grad.addColorStop(0, isLifted ? 'rgba(255,255,255,0.42)' : 'rgba(255,255,255,0.22)');
+      grad.addColorStop(0.65, 'rgba(0,0,0,0.0)');
+      grad.addColorStop(1, 'rgba(0,15,25,0.38)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(this.x - this.length * 1.5, this.y - this.length * 1.5, this.length * 3, this.length * 3);
+
+      // 5. Shimmering / Sparkling Ginrin Scales (Dramatically amplified when Lifted from water)
+      const shimmerBoost = isLifted ? 1.85 : 1.0;
+      if (this.shimmer > 0.2) {
+        this.scales.forEach(sc => {
+          const n = this.spine[sc.nodeIdx];
+          const p = this.spine[sc.nodeIdx - 1];
+          const perp = Math.atan2(n.y - p.y, n.x - p.x) + Math.PI / 2;
+          const sx = n.x + Math.cos(perp) * radii[sc.nodeIdx] * sc.lat * 0.65;
+          const sy = n.y + Math.sin(perp) * radii[sc.nodeIdx] * sc.lat * 0.65;
+
+          // Specular reflection responds to fish movement + cursor angle
+          const lightWave = Math.sin(time * (isLifted ? 0.22 : 0.09) + sc.phase + (this.x + this.y) * 0.03);
+          const threshold = isLifted ? 0.15 : 0.62;
+          if (lightWave > threshold) {
+            const intensity = ((lightWave - threshold) / (1 - threshold)) * this.shimmer * shimmerBoost;
+            const hue = (time * 3 + sc.hueShift + 190) % 360;
+            ctx.fillStyle = isLifted
+              ? `hsla(${hue}, 95%, 82%, ${Math.min(1, intensity)})`
+              : `rgba(255, 253, 230, ${Math.min(0.85, intensity * 0.7)})`;
+            ctx.beginPath();
+            ctx.arc(sx, sy, (isLifted ? 2.6 : 1.5), 0, Math.PI * 2);
+            ctx.fill();
+          }
+        });
+      }
+
+      ctx.restore(); // End body clip
+
+      // 6. Star-Glint Prismatic Sparkles when Lifted out of Water
+      if (isLifted) {
+        for (let i = 0; i < 5; i++) {
+          const sc = this.scales[(i * 5 + Math.floor(time * 0.25)) % this.scales.length];
+          const n = this.spine[sc.nodeIdx];
+          const pulse = Math.abs(Math.sin(time * 0.2 + i * 1.3));
+          if (pulse > 0.5) {
+            drawStarGlint(ctx, n.x + sc.lat * 6, n.y - sc.lat * 5, 7 * pulse, `hsla(${(time * 6 + i * 60) % 360}, 100%, 88%, ${pulse})`);
+          }
+        }
+      }
+
+      // 7. Dorsal Fin Ridge & Eyes
+      ctx.beginPath();
+      for (let i = 2; i <= 6; i++) {
+        if (i === 2) ctx.moveTo(this.spine[i].x, this.spine[i].y);
+        else ctx.lineTo(this.spine[i].x, this.spine[i].y);
+      }
+      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
+      ctx.lineWidth = isLifted ? 2.5 : 1.6;
+      ctx.stroke();
+
+      // Eyes
+      const n0 = this.spine[0], n1 = this.spine[1];
+      const headAng = Math.atan2(n0.y - n1.y, n0.x - n1.x);
+      const eyeOffset = radii[1] * 0.72;
+      [-1, 1].forEach(side => {
+        const ex = n0.x - Math.cos(headAng) * (radii[0] * 0.3) + Math.cos(headAng + side * Math.PI / 2) * eyeOffset;
+        const ey = n0.y - Math.sin(headAng) * (radii[0] * 0.3) + Math.sin(headAng + side * Math.PI / 2) * eyeOffset;
+        ctx.fillStyle = '#111';
+        ctx.beginPath();
+        ctx.arc(ex, ey, isLifted ? 2.4 : 1.6, 0, Math.PI * 2);
+        ctx.fill();
+      });
+
+      ctx.restore();
+    }
+
+    drawPairedFins(ctx, nodeIdx, finSize, sweep, isLifted) {
+      const n = this.spine[nodeIdx];
+      const prev = this.spine[nodeIdx - 1];
+      const bodyAng = Math.atan2(n.y - prev.y, n.x - prev.x);
+      const flutter = Math.sin(time * (isLifted ? 0.3 : 0.12) + this.id + nodeIdx) * 0.14;
+
+      [-1, 1].forEach(side => {
+        const fAng = bodyAng + side * (Math.PI * 0.45 + sweep * 0.3 + flutter);
+        ctx.save();
+        ctx.translate(n.x, n.y);
+        ctx.rotate(fAng);
+        ctx.beginPath();
+        ctx.ellipse(finSize * 0.55, 0, finSize * 0.6, finSize * 0.28, 0, 0, Math.PI * 2);
+        ctx.fillStyle = this.baseColor + '88';
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+        ctx.restore();
+      });
+    }
+
+    traceBodyPath(ctx, radii) {
+      const leftPts = [];
+      const rightPts = [];
+      for (let i = 0; i < this.numNodes; i++) {
+        const curr = this.spine[i];
+        const prev = i === 0 ? this.spine[1] : this.spine[i - 1];
+        const ang = i === 0
+          ? Math.atan2(curr.y - prev.y, curr.x - prev.x)
+          : Math.atan2(prev.y - curr.y, prev.x - curr.x);
+        const perp = ang + Math.PI / 2;
+        leftPts.push({ x: curr.x + Math.cos(perp) * radii[i], y: curr.y + Math.sin(perp) * radii[i] });
+        rightPts.push({ x: curr.x - Math.cos(perp) * radii[i], y: curr.y - Math.sin(perp) * radii[i] });
+      }
+      // Snout tip
+      const h0 = this.spine[0], h1 = this.spine[1];
+      const hAng = Math.atan2(h0.y - h1.y, h0.x - h1.x);
+      const tipX = h0.x + Math.cos(hAng) * radii[0] * 1.1;
+      const tipY = h0.y + Math.sin(hAng) * radii[0] * 1.1;
+
+      ctx.moveTo(tipX, tipY);
+      leftPts.forEach(p => ctx.lineTo(p.x, p.y));
+      for (let i = rightPts.length - 1; i >= 0; i--) {
+        ctx.lineTo(rightPts[i].x, rightPts[i].y);
+      }
+      ctx.closePath();
+    }
+  }
+
+  function drawStarGlint(ctx, x, y, r, color) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(time * 0.04);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < 4; i++) {
+      ctx.rotate(Math.PI / 2);
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(r * 0.15, r * 0.15, r, 0);
+      ctx.quadraticCurveTo(r * 0.15, -r * 0.15, 0, 0);
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function getRandomPointInZone(zoneId) {
+    if (zoneId === 'mainPond') {
+      const ang = Math.random() * Math.PI * 2;
+      const r = Math.random() * (zones.mainPond.r * 0.72);
+      return { x: zones.mainPond.x + Math.cos(ang) * r, y: zones.mainPond.y + Math.sin(ang) * r };
+    }
+    if (zoneId === 'breeder') {
+      return {
+        x: zones.breeder.x + 30 + Math.random() * (zones.breeder.w - 60),
+        y: zones.breeder.y + 30 + Math.random() * (zones.breeder.h - 60)
+      };
+    }
+    const t = zones.tanks.find(tk => tk.id === zoneId) || zones.tanks[0];
+    return {
+      x: t.x + 28 + Math.random() * Math.max(20, t.w - 56),
+      y: t.y + 32 + Math.random() * Math.max(20, t.h - 50)
+    };
+  }
+
+  function SteerInsideZone(fish) {
+    const pad = fish.isFry ? 14 : 26;
+    if (fish.zone === 'mainPond') {
+      const dx = fish.x - zones.mainPond.x;
+      const dy = fish.y - zones.mainPond.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > zones.mainPond.r - pad) {
+        fish.targetAngle = Math.atan2(-dy, -dx) + (Math.random() - 0.5) * 0.4;
+      }
+      return;
+    }
+    if (fish.zone === 'breeder') {
+      const b = zones.breeder;
+      if (fish.x < b.x + pad) fish.targetAngle = 0;
+      if (fish.x > b.x + b.w - pad) fish.targetAngle = Math.PI;
+      if (fish.y < b.y + pad) fish.targetAngle = Math.PI / 2;
+      // Adult koi are physically blocked by the One-Way Slatted Weir at the bottom of Breeder Tank!
+      if (!fish.isFry && fish.y > b.y + b.h - pad) {
+        fish.targetAngle = -Math.PI / 2 + (Math.random() - 0.5) * 0.5;
+        fish.y = b.y + b.h - pad;
+      }
+      return;
+    }
+    const t = zones.tanks.find(tk => tk.id === fish.zone);
+    if (t) {
+      if (fish.x < t.x + pad) fish.targetAngle = 0;
+      if (fish.x > t.x + t.w - pad) fish.targetAngle = Math.PI;
+      if (fish.y < t.y + 26) fish.targetAngle = Math.PI / 2;
+      if (fish.y > t.y + t.h - pad) fish.targetAngle = -Math.PI / 2;
+    }
+  }
+
+  // Breeding & Genetic Inheritance Engine
+  function checkBreeding(force = false) {
+    const breeders = fishList.filter(f => f.zone === 'breeder' && !f.isFry && draggedFish !== f);
+    if (breeders.length < 2) return;
+
+    const p1 = breeders[0];
+    const p2 = breeders[1];
+    if (!force && (p1.breedCooldown > 0 || p2.breedCooldown > 0)) return;
+
+    p1.breedCooldown = 420;
+    p2.breedCooldown = 420;
+
+    // Combine genetics + chance for vibrant mutation & increased Ginrin shimmer
+    const isMutant = Math.random() < 0.25;
+    const mutPreset = PALETTES[Math.floor(Math.random() * PALETTES.length)];
+    const childShimmer = Math.min(1.0, ((p1.shimmer + p2.shimmer) / 2) + (Math.random() * 0.18 - 0.04));
+
+    const fry = new Koi({
+      name: isMutant ? `Radiant ${mutPreset.pattern} Fry` : `${p1.pattern}-${p2.pattern} Fry`,
+      baseColor: Math.random() < 0.5 ? p1.baseColor : p2.baseColor,
+      secColor: isMutant ? mutPreset.sec : (Math.random() < 0.5 ? p1.secColor : p2.secColor),
+      tertColor: Math.random() < 0.5 ? p1.tertColor : p2.tertColor,
+      pattern: isMutant ? mutPreset.pattern : (Math.random() < 0.5 ? p1.pattern : p2.pattern),
+      shimmer: childShimmer,
+      finish: childShimmer > 0.9 ? 'Prismatic Star Ginrin' : p1.finish,
+      zone: 'breeder',
+      isFry: true,
+      x: (p1.x + p2.x) * 0.5,
+      y: (p1.y + p2.y) * 0.5
+    });
+
+    fishList.push(fry);
+    ripples.push({ x: fry.x, y: fry.y, r: 4, maxR: 45, alpha: 0.7 });
+    spawnParticles.push({
+      x: fry.x,
+      y: fry.y,
+      text: 'Offspring Spawned! Swimming toward One-Way Slats...',
+      life: 110
+    });
+  }
+
+  // Initial Population
+  function initFish() {
+    resize();
+    // 6 Koi in Main Sanctuary Pond
+    for (let i = 0; i < 6; i++) {
+      fishList.push(new Koi({ preset: PALETTES[i % PALETTES.length], zone: 'mainPond' }));
+    }
+    // 2 Prize Breeders in the Breeder Tank ready to demonstrate slatted fry passage
+    fishList.push(new Koi({ preset: PALETTES[2], zone: 'breeder' }));
+    fishList.push(new Koi({ preset: PALETTES[3], zone: 'breeder' }));
+    // Pre-populate a couple of holding tanks
+    fishList.push(new Koi({ preset: PALETTES[4], zone: 'tank1' }));
+    fishList.push(new Koi({ preset: PALETTES[6], zone: 'tank3' }));
+  }
+
+  // Interaction / Dragging across Main Canvas and Off-Screen Holding Drawer
+  let draggedFish = null;
+  let hoveredFish = null;
+  let cursorX = 0, cursorY = 0;
+  let isCursorInDrawer = false;
+
+  function updateInspector(fish) {
+    if (!fish) return;
+    document.getElementById('insp-name').textContent = fish.name;
+    document.getElementById('insp-pattern').textContent = fish.pattern;
+    document.getElementById('insp-shimmer').textContent = `${fish.finish} (${Math.round(fish.shimmer * 100)}%)`;
+    document.getElementById('insp-stage').textContent = fish.isFry ? `Fry (${Math.round(fish.length)}mm — Passes Slats)` : `Adult (${Math.round(fish.length)}mm)`;
+    document.getElementById('insp-zone').textContent = getZoneLabel(fish.zone);
+    const colorsEl = document.getElementById('insp-colors');
+    colorsEl.innerHTML = `
+      <span class="swatch" style="background:${fish.baseColor}"></span>
+      <span class="swatch" style="background:${fish.secColor}"></span>
+      <span class="swatch" style="background:${fish.tertColor}"></span>
+    `;
+  }
+
+  function getZoneLabel(zId) {
+    if (zId === 'mainPond') return zones.mainPond.name;
+    if (zId === 'breeder') return zones.breeder.name;
+    const t = zones.tanks.find(tk => tk.id === zId);
+    return t ? t.name : zId;
+  }
+
+  function findFishAt(x, y, inDrawer) {
+    for (let i = fishList.length - 1; i >= 0; i--) {
+      const f = fishList[i];
+      const fInDrawer = f.zone.startsWith('tank');
+      if (fInDrawer !== inDrawer) continue;
+      if (Math.hypot(f.x - x, f.y - y) < Math.max(22, f.length * 0.45)) {
+        return f;
+      }
+    }
+    return null;
+  }
+
+  window.addEventListener('mousemove', (e) => {
+    const drawerRect = drawerCanvas.getBoundingClientRect();
+    const pondRect = pondCanvas.getBoundingClientRect();
+
+    if (e.clientX >= drawerRect.left && e.clientX <= drawerRect.right &&
+        e.clientY >= drawerRect.top && e.clientY <= drawerRect.bottom) {
+      isCursorInDrawer = true;
+      cursorX = e.clientX - drawerRect.left;
+      cursorY = e.clientY - drawerRect.top;
+    } else {
+      isCursorInDrawer = false;
+      cursorX = e.clientX - pondRect.left;
+      cursorY = e.clientY - pondRect.top;
+    }
+
+    if (draggedFish) {
+      draggedFish.x = cursorX;
+      draggedFish.y = cursorY;
+      updateInspector(draggedFish);
+    } else {
+      hoveredFish = findFishAt(cursorX, cursorY, isCursorInDrawer);
+      if (hoveredFish) updateInspector(hoveredFish);
+    }
+  });
+
+  window.addEventListener('mousedown', () => {
+    const f = findFishAt(cursorX, cursorY, isCursorInDrawer);
+    if (f) {
+      draggedFish = f;
+      updateInspector(f);
+      if (!isCursorInDrawer) {
+        ripples.push({ x: f.x, y: f.y, r: 5, maxR: 50, alpha: 0.65 });
+      }
+    }
+  });
+
+  window.addEventListener('mouseup', () => {
+    if (!draggedFish) return;
+    // Determine target drop zone
+    if (isCursorInDrawer) {
+      const targetTank = zones.tanks.find(t => cursorY >= t.y && cursorY <= t.y + t.h);
+      if (targetTank) {
+        draggedFish.zone = targetTank.id;
+      } else {
+        draggedFish.zone = 'tank0';
+      }
+    } else {
+      const b = zones.breeder;
+      if (cursorX >= b.x && cursorX <= b.x + b.w && cursorY >= b.y && cursorY <= b.y + b.h) {
+        draggedFish.zone = 'breeder';
+      } else {
+        draggedFish.zone = 'mainPond';
+        // Clamp inside main pond if dropped on grass
+        const dx = cursorX - zones.mainPond.x;
+        const dy = cursorY - zones.mainPond.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > zones.mainPond.r - 30) {
+          const ang = Math.atan2(dy, dx);
+          draggedFish.x = zones.mainPond.x + Math.cos(ang) * (zones.mainPond.r * 0.6);
+          draggedFish.y = zones.mainPond.y + Math.sin(ang) * (zones.mainPond.r * 0.6);
+        }
+        ripples.push({ x: draggedFish.x, y: draggedFish.y, r: 6, maxR: 55, alpha: 0.75 });
+      }
+    }
+    for (let i = 0; i < draggedFish.numNodes; i++) {
+      draggedFish.spine[i].x = draggedFish.x;
+      draggedFish.spine[i].y = draggedFish.y;
+    }
+    updateInspector(draggedFish);
+    draggedFish = null;
+  });
+
+  // UI Buttons
+  document.getElementById('btn-spawn-wild').addEventListener('click', () => {
+    const f = new Koi({ zone: 'mainPond' });
+    fishList.push(f);
+    ripples.push({ x: f.x, y: f.y, r: 5, maxR: 48, alpha: 0.75 });
+    updateInspector(f);
+  });
+
+  document.getElementById('btn-force-breed').addEventListener('click', () => {
+    checkBreeding(true);
+  });
+
+  document.getElementById('btn-toggle-drawer').addEventListener('click', () => {
+    document.getElementById('holding-drawer').classList.toggle('collapsed');
+    setTimeout(resize, 310);
+  });
+
+  window.addEventListener('resize', resize);
+
+  // Rendering Routines
+  function drawMainCanvas() {
+    pCtx.clearRect(0, 0, width, height);
+    // 1. Lush Mossy Bank Background
+    const bgGrad = pCtx.createRadialGradient(zones.mainPond.x, zones.mainPond.y, zones.mainPond.r * 0.5, zones.mainPond.x, zones.mainPond.y, width * 0.9);
+    bgGrad.addColorStop(0, '#1e3522');
+    bgGrad.addColorStop(1, '#0d1912');
+    pCtx.fillStyle = bgGrad;
+    pCtx.fillRect(0, 0, width, height);
+
+    // 2. Main Circular Sanctuary Pond
+    const mp = zones.mainPond;
+    pCtx.save();
+    pCtx.beginPath();
+    pCtx.arc(mp.x, mp.y, mp.r, 0, Math.PI * 2);
+    const pondGrad = pCtx.createRadialGradient(mp.x - mp.r * 0.2, mp.y - mp.r * 0.2, mp.r * 0.1, mp.x, mp.y, mp.r);
+    pondGrad.addColorStop(0, '#1b4d57');
+    pondGrad.addColorStop(0.65, '#0f313a');
+    pondGrad.addColorStop(1, '#071b21');
+    pCtx.fillStyle = pondGrad;
+    pCtx.fill();
+
+    // Animated Underwater Caustics inside Main Pond
+    pCtx.clip();
+    pCtx.strokeStyle = 'rgba(128, 222, 234, 0.07)';
+    pCtx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      pCtx.beginPath();
+      const waveR = (mp.r * 0.2) + ((i * 38 + time * 0.35) % (mp.r * 0.78));
+      pCtx.arc(
+        mp.x + Math.sin(time * 0.02 + i) * 18,
+        mp.y + Math.cos(time * 0.02 + i) * 18,
+        waveR, 0, Math.PI * 2
+      );
+      pCtx.stroke();
+    }
+    pCtx.restore();
+
+    // Stone Embankment Ring
+    pondStones.forEach(st => {
+      pCtx.save();
+      pCtx.translate(st.x, st.y);
+      pCtx.rotate(st.rot);
+      pCtx.fillStyle = `rgb(${st.shade}, ${st.shade + 6}, ${st.shade + 4})`;
+      pCtx.beginPath();
+      pCtx.ellipse(0, 0, st.rx, st.ry, 0, 0, Math.PI * 2);
+      pCtx.fill();
+      pCtx.strokeStyle = 'rgba(0,0,0,0.45)';
+      pCtx.lineWidth = 1.5;
+      pCtx.stroke();
+      if (st.moss) {
+        pCtx.fillStyle = 'rgba(76, 175, 80, 0.28)';
+        pCtx.beginPath();
+        pCtx.ellipse(-2, -2, st.rx * 0.6, st.ry * 0.5, 0, 0, Math.PI * 2);
+        pCtx.fill();
+      }
+      pCtx.restore();
+    });
+
+    // 3. Draw Breeder Spawning Tank & One-Way Slatted Weir System
+    drawBreederAndSlats();
+
+    // 4. Draw Non-Lifted Fish in Main Pond & Breeder Tank
+    fishList.forEach(f => {
+      if (!f.zone.startsWith('tank') && draggedFish !== f) {
+        f.draw(pCtx, false);
+      }
+    });
+
+    // 5. Lily Pads & Floating Blooms (over fish for depth realism)
+    lilyPads.forEach(lp => {
+      pCtx.save();
+      pCtx.translate(lp.x + Math.sin(time * 0.02 + lp.size) * 1.5, lp.y + Math.cos(time * 0.02 + lp.size) * 1.5);
+      pCtx.fillStyle = 'rgba(0,0,0,0.28)';
+      pCtx.beginPath();
+      pCtx.arc(4, 6, lp.size, 0, Math.PI * 2);
+      pCtx.fill();
+
+      pCtx.fillStyle = '#2e6b34';
+      pCtx.beginPath();
+      pCtx.moveTo(0, 0);
+      pCtx.arc(0, 0, lp.size, lp.notch + 0.25, lp.notch + Math.PI * 2 - 0.25);
+      pCtx.closePath();
+      pCtx.fill();
+
+      if (lp.hasFlower) {
+        pCtx.fillStyle = lp.flowerHue;
+        for (let p = 0; p < 6; p++) {
+          pCtx.save();
+          pCtx.rotate((p * Math.PI) / 3);
+          pCtx.beginPath();
+          pCtx.ellipse(5, 0, 5, 2.5, 0, 0, Math.PI * 2);
+          pCtx.fill();
+          pCtx.restore();
+        }
+      }
+      pCtx.restore();
+    });
+
+    // 6. Water Ripples & Splash Droplets
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      const rp = ripples[i];
+      rp.r += 0.9;
+      rp.alpha *= 0.96;
+      pCtx.strokeStyle = `rgba(200, 245, 255, ${rp.alpha})`;
+      pCtx.lineWidth = 1.5;
+      pCtx.beginPath();
+      pCtx.arc(rp.x, rp.y, rp.r, 0, Math.PI * 2);
+      pCtx.stroke();
+      if (rp.alpha < 0.03) ripples.splice(i, 1);
+    }
+
+    // 7. Notifications / Slatted Passage Callouts
+    for (let i = spawnParticles.length - 1; i >= 0; i--) {
+      const sp = spawnParticles[i];
+      sp.y -= 0.45;
+      sp.life--;
+      pCtx.fillStyle = `rgba(255, 213, 79, ${Math.min(1, sp.life / 30)})`;
+      pCtx.font = '600 12px Segoe UI, sans-serif';
+      pCtx.fillText(sp.text, sp.x - 110, sp.y);
+      if (sp.life <= 0) spawnParticles.splice(i, 1);
+    }
+
+    // 8. If a Fish is Lifted Over Main Canvas, Render It on Top with Full Iridescent Shimmer
+    if (draggedFish && !isCursorInDrawer) {
+      draggedFish.draw(pCtx, true);
+    }
+
+    drawDroplets(pCtx, false);
+  }
+
+  function drawBreederAndSlats() {
+    const b = zones.breeder;
+    const sc = zones.slatChute;
+
+    // Breeder Tank Basin
+    pCtx.save();
+    pCtx.fillStyle = '#0d2b33';
+    pCtx.strokeStyle = 'rgba(212, 175, 55, 0.65)';
+    pCtx.lineWidth = 3;
+    pCtx.fillRect(b.x, b.y, b.w, b.h);
+    pCtx.strokeRect(b.x, b.y, b.w, b.h);
+
+    // Header label
+    pCtx.fillStyle = 'rgba(10, 20, 24, 0.85)';
+    pCtx.fillRect(b.x, b.y - 26, b.w, 24);
+    pCtx.fillStyle = '#ffd54f';
+    pCtx.font = 'bold 12px Segoe UI, sans-serif';
+    pCtx.fillText('BREEDER SPAWNING TANK (Place 2 Adults)', b.x + 8, b.y - 10);
+
+    // One-Way Slatted Fry Weir Divider at Bottom of Breeder Tank
+    const slatCount = 14;
+    const slatStep = b.w / slatCount;
+    pCtx.fillStyle = '#d4af37';
+    for (let i = 0; i <= slatCount; i++) {
+      const sx = b.x + i * slatStep;
+      // Slatted bars with calibrated gaps for fry passage
+      pCtx.fillRect(sx - 2, b.y + b.h - 5, 4, 10);
+    }
+
+    // One-Way Outflow Chute below slats
+    const chuteGrad = pCtx.createLinearGradient(sc.x, sc.y, sc.x, sc.y + sc.h);
+    chuteGrad.addColorStop(0, '#0a2229');
+    chuteGrad.addColorStop(1, '#06151a');
+    pCtx.fillStyle = chuteGrad;
+    pCtx.fillRect(sc.x, sc.y + 5, sc.w, sc.h - 5);
+    pCtx.strokeStyle = 'rgba(77, 208, 225, 0.45)';
+    pCtx.lineWidth = 2;
+    pCtx.strokeRect(sc.x, sc.y + 5, sc.w, sc.h - 5);
+
+    // Animated One-Way Current Arrows
+    pCtx.fillStyle = 'rgba(77, 208, 225, 0.35)';
+    const arrowY = sc.y + 18 + ((time * 0.6) % 36);
+    for (let a = 0; a < 3; a++) {
+      const ax = sc.x + sc.w * (0.25 + a * 0.25);
+      pCtx.beginPath();
+      pCtx.moveTo(ax - 7, arrowY);
+      pCtx.lineTo(ax + 7, arrowY);
+      pCtx.lineTo(ax, arrowY + 10);
+      pCtx.closePath();
+      pCtx.fill();
+    }
+
+    pCtx.fillStyle = '#80cbc4';
+    pCtx.font = '600 11px Segoe UI, sans-serif';
+    pCtx.fillText('ONE-WAY FRY SLATS (Adults Blocked)', sc.x + 14, sc.y + sc.h - 24);
+    pCtx.fillStyle = '#ffd54f';
+    pCtx.fillText(`Auto-Routing Fry → ${getZoneLabel(slatTargetId)}`, sc.x + 14, sc.y + sc.h - 9);
+    pCtx.restore();
+  }
+
+  function drawHoldingDrawer() {
+    dCtx.clearRect(0, 0, dWidth, dHeight);
+
+    zones.tanks.forEach((t, idx) => {
+      // Tank water background
+      const g = dCtx.createLinearGradient(t.x, t.y, t.x + t.w, t.y + t.h);
+      g.addColorStop(0, '#10313b');
+      g.addColorStop(1, '#091e24');
+      dCtx.fillStyle = g;
+      dCtx.fillRect(t.x, t.y, t.w, t.h);
+
+      const isTarget = t.id === slatTargetId;
+      dCtx.strokeStyle = isTarget ? '#4dd0e1' : 'rgba(212, 175, 55, 0.4)';
+      dCtx.lineWidth = isTarget ? 2 : 1.2;
+      dCtx.strokeRect(t.x, t.y, t.w, t.h);
+
+      // Slatted Inflow visual on left wall if this tank is connected to the One-Way Weir
+      if (isTarget) {
+        dCtx.fillStyle = '#4dd0e1';
+        for (let s = 0; s < 5; s++) {
+          dCtx.fillRect(t.x, t.y + 26 + s * 10, 5, 5);
+        }
+      }
+
+      // Tank Header Bar
+      dCtx.fillStyle = 'rgba(0, 0, 0, 0.45)';
+      dCtx.fillRect(t.x, t.y, t.w, 22);
+      dCtx.fillStyle = isTarget ? '#4dd0e1' : '#ffd54f';
+      dCtx.font = '600 11.5px Segoe UI, sans-serif';
+      const count = fishList.filter(f => f.zone === t.id).length;
+      dCtx.fillText(`${t.name} (${count})`, t.x + 8, t.y + 15);
+    });
+
+    // Draw fish residing in the 5 off-screen holding tanks
+    fishList.forEach(f => {
+      if (f.zone.startsWith('tank') && draggedFish !== f) {
+        f.draw(dCtx, false);
+      }
+    });
+
+    // If lifting a fish inside the Holding Drawer, draw it with full shimmer
+    if (draggedFish && isCursorInDrawer) {
+      draggedFish.draw(dCtx, true);
+    }
+
+    drawDroplets(dCtx, true);
+  }
+
+  function drawDroplets(ctx, drawerMode) {
+    for (let i = droplets.length - 1; i >= 0; i--) {
+      const d = droplets[i];
+      if (d.inDrawer !== drawerMode) continue;
+      d.x += d.vx;
+      d.y += d.vy;
+      d.life--;
+      ctx.fillStyle = `rgba(178, 235, 242, ${d.life / 24})`;
+      ctx.beginPath();
+      ctx.arc(d.x, d.y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+      if (d.life <= 0) droplets.splice(i, 1);
+    }
+  }
+
+  function loop() {
+    time++;
+    fishList.forEach(f => f.update());
+    if (time % 90 === 0) checkBreeding(false);
+
+    drawMainCanvas();
+    drawHoldingDrawer();
+    requestAnimationFrame(loop);
+  }
+
+  initFish();
+  loop();
+})();
+</script>
+</body>
+</html>
